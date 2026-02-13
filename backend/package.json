@@ -1,0 +1,18 @@
+{
+  "name": "git-analysis-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Git analysis backend - Express + SQLite + simple-git",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "simple-git": "^3.27.0"
+  }
+}
