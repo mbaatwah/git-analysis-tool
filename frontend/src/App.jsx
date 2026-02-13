@@ -1,54 +1,95 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useApi } from './hooks/useApi.js';
+import Treemap from './visualizations/Treemap.jsx';
+import FileDetailPanel from './components/FileDetailPanel.jsx';
+import DateFilter from './components/DateFilter.jsx';
 
 function App() {
   const [repoPath, setRepoPath] = useState('');
   const [repo, setRepo] = useState(null);
   const [repoInfo, setRepoInfo] = useState(null);
-  const [files, setFiles] = useState([]);
-  const [commits, setCommits] = useState(null);
-  const [view, setView] = useState('files');
+  const [churnData, setChurnData] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [view, setView] = useState('treemap');
+  const [dateFilter, setDateFilter] = useState({});
   const { get, post, loading, error, setError } = useApi();
+
+  const fetchChurnData = useCallback(
+    async (repoId, filters = {}) => {
+      const params = new URLSearchParams({ repoId });
+      if (filters.startDate) params.set('startDate', filters.startDate);
+      if (filters.endDate) params.set('endDate', filters.endDate);
+
+      const data = await get(`/analysis/churn?${params}`);
+      setChurnData(data);
+    },
+    [get]
+  );
 
   const handleSync = async () => {
     if (!repoPath.trim()) return;
     setError(null);
+    setSelectedFile(null);
     try {
       const data = await post('/config/repo', { path: repoPath.trim() });
       setRepo(data.repo);
       setRepoInfo(data.info);
-
-      const filesData = await get(`/files?repoId=${data.repo.id}`);
-      setFiles(filesData.files);
-
-      const commitsData = await get(`/commits?repoId=${data.repo.id}&limit=25`);
-      setCommits(commitsData);
+      await fetchChurnData(data.repo.id);
     } catch (e) {
       // error is already set by useApi
     }
   };
 
+  const handleDateFilterChange = async (filters) => {
+    setDateFilter(filters);
+    if (repo) {
+      setSelectedFile(null);
+      await fetchChurnData(repo.id, filters);
+    }
+  };
+
+  const handleFileSelect = (file) => {
+    setSelectedFile((prev) =>
+      prev && prev.file_path === file.file_path ? null : file
+    );
+  };
+
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="h-screen flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="border-b border-gray-800 px-6 py-4">
+      <header className="border-b border-gray-800 px-6 py-3 shrink-0">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold text-white tracking-tight">
             <span className="text-indigo-400">git</span>-analysis
           </h1>
-          {repo && (
-            <div className="text-sm text-gray-400">
-              <span className="text-gray-300 font-medium">{repo.name}</span>
-              {' · '}
-              {repo.totalCommits} commits synced
-            </div>
-          )}
+          <div className="flex items-center gap-4">
+            {churnData && (
+              <div className="flex items-center gap-3 text-xs text-gray-500">
+                <span>
+                  <span className="text-gray-300 font-medium">{churnData.summary.totalFiles}</span> files
+                </span>
+                <span>
+                  avg score <span className="text-indigo-400 font-medium">{churnData.summary.avgChurnScore}</span>
+                </span>
+                <span>
+                  max <span className="text-red-400 font-medium">{churnData.summary.maxChurnScore}</span>
+                </span>
+              </div>
+            )}
+            {repo && (
+              <div className="text-sm text-gray-400">
+                <span className="text-gray-300 font-medium">{repo.name}</span>
+                {' · '}
+                {repo.totalCommits} commits
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
-      <div className="flex-1 flex">
+      <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
-        <aside className="w-80 border-r border-gray-800 p-4 flex flex-col gap-4">
+        <aside className="w-72 border-r border-gray-800 p-4 flex flex-col gap-4 shrink-0 overflow-y-auto">
           <div>
             <label className="block text-sm font-medium text-gray-400 mb-1">
               Repository Path
@@ -77,57 +118,95 @@ function App() {
           )}
 
           {repoInfo && (
-            <div className="space-y-2 text-sm">
-              <h3 className="font-medium text-gray-300">Repo Info</h3>
-              <div className="text-gray-400">
+            <div className="space-y-1 text-sm">
+              <h3 className="font-medium text-gray-300 text-xs uppercase tracking-wider">Repo</h3>
+              <div className="text-gray-400 text-xs">
                 <p>Branch: <span className="text-gray-200">{repoInfo.currentBranch}</span></p>
                 <p>Branches: <span className="text-gray-200">{repoInfo.branches.length}</span></p>
                 {repoInfo.remotes.length > 0 && (
-                  <p>Remote: <span className="text-gray-200">{repoInfo.remotes[0].url}</span></p>
+                  <p className="truncate" title={repoInfo.remotes[0].url}>
+                    Remote: <span className="text-gray-200">{repoInfo.remotes[0].url}</span>
+                  </p>
                 )}
               </div>
             </div>
           )}
 
           {repo && (
-            <div className="flex gap-1 mt-2">
-              <button
-                onClick={() => setView('files')}
-                className={`flex-1 text-sm py-1.5 rounded-md transition-colors ${
-                  view === 'files'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-800 text-gray-400 hover:text-white'
-                }`}
-              >
-                Files
-              </button>
-              <button
-                onClick={() => setView('commits')}
-                className={`flex-1 text-sm py-1.5 rounded-md transition-colors ${
-                  view === 'commits'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-800 text-gray-400 hover:text-white'
-                }`}
-              >
-                Commits
-              </button>
-            </div>
+            <>
+              <DateFilter onFilterChange={handleDateFilterChange} />
+
+              <div>
+                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                  View
+                </label>
+                <div className="flex gap-1">
+                  {['treemap', 'table'].map((v) => (
+                    <button
+                      key={v}
+                      onClick={() => setView(v)}
+                      className={`flex-1 text-xs py-1.5 rounded-md transition-colors capitalize ${
+                        view === v
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-gray-800 text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Legend */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                  Recency
+                </label>
+                <div className="space-y-1 text-xs">
+                  <LegendItem color="bg-red-500" label="< 7 days ago" />
+                  <LegendItem color="bg-amber-500" label="< 30 days ago" />
+                  <LegendItem color="bg-indigo-500" label="< 90 days ago" />
+                  <LegendItem color="bg-slate-700" label="> 90 days ago" />
+                </div>
+              </div>
+            </>
           )}
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 p-6 overflow-auto">
-          {!repo ? (
-            <div className="flex items-center justify-center h-full text-gray-600">
-              <div className="text-center">
-                <p className="text-lg">Enter a repository path to get started</p>
-                <p className="text-sm mt-1">Point to any local git repository</p>
+        <main className="flex-1 flex overflow-hidden">
+          <div className="flex-1 overflow-auto">
+            {!repo ? (
+              <div className="flex items-center justify-center h-full text-gray-600">
+                <div className="text-center">
+                  <p className="text-lg">Enter a repository path to get started</p>
+                  <p className="text-sm mt-1">Point to any local git repository</p>
+                </div>
               </div>
-            </div>
-          ) : view === 'files' ? (
-            <FileList files={files} />
-          ) : (
-            <CommitList commits={commits} />
+            ) : view === 'treemap' ? (
+              <Treemap
+                files={churnData?.files || []}
+                onFileSelect={handleFileSelect}
+                selectedFile={selectedFile}
+              />
+            ) : (
+              <div className="p-6">
+                <FileTable
+                  files={churnData?.files || []}
+                  onFileSelect={handleFileSelect}
+                  selectedFile={selectedFile}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* File Detail Panel */}
+          {selectedFile && repo && (
+            <FileDetailPanel
+              file={selectedFile}
+              repoId={repo.id}
+              onClose={() => setSelectedFile(null)}
+            />
           )}
         </main>
       </div>
@@ -135,78 +214,67 @@ function App() {
   );
 }
 
-function FileList({ files }) {
-  if (!files.length) return <p className="text-gray-500">No file data available.</p>;
+function LegendItem({ color, label }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className={`w-3 h-3 rounded-sm ${color}`} />
+      <span className="text-gray-400">{label}</span>
+    </div>
+  );
+}
+
+function FileTable({ files, onFileSelect, selectedFile }) {
+  if (!files.length) return <p className="text-gray-500">No churn data available.</p>;
 
   return (
     <div>
       <h2 className="text-lg font-semibold mb-3">
-        Files by Churn <span className="text-gray-500 text-sm font-normal">({files.length} files)</span>
+        Files by Churn Score{' '}
+        <span className="text-gray-500 text-sm font-normal">({files.length} files)</span>
       </h2>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-800 text-left text-gray-400">
               <th className="pb-2 pr-4">File</th>
+              <th className="pb-2 pr-4 text-right">Score</th>
               <th className="pb-2 pr-4 text-right">Changes</th>
-              <th className="pb-2 pr-4 text-right">Insertions</th>
-              <th className="pb-2 pr-4 text-right">Deletions</th>
+              <th className="pb-2 pr-4 text-right">+/-</th>
               <th className="pb-2 pr-4 text-right">Authors</th>
               <th className="pb-2 text-right">Last Changed</th>
             </tr>
           </thead>
           <tbody>
-            {files.map((f) => (
-              <tr key={f.file_path} className="border-b border-gray-800/50 hover:bg-gray-900/50">
-                <td className="py-2 pr-4 font-mono text-xs text-gray-200 max-w-md truncate">
-                  {f.file_path}
-                </td>
-                <td className="py-2 pr-4 text-right text-indigo-400 font-medium">{f.change_count}</td>
-                <td className="py-2 pr-4 text-right text-green-400">+{f.total_insertions}</td>
-                <td className="py-2 pr-4 text-right text-red-400">-{f.total_deletions}</td>
-                <td className="py-2 pr-4 text-right text-gray-300">{f.author_count}</td>
-                <td className="py-2 text-right text-gray-400 text-xs">
-                  {new Date(f.last_changed).toLocaleDateString()}
-                </td>
-              </tr>
-            ))}
+            {files.map((f) => {
+              const isSelected = selectedFile && selectedFile.file_path === f.file_path;
+              return (
+                <tr
+                  key={f.file_path}
+                  onClick={() => onFileSelect(f)}
+                  className={`border-b border-gray-800/50 cursor-pointer transition-colors ${
+                    isSelected ? 'bg-indigo-900/30' : 'hover:bg-gray-900/50'
+                  }`}
+                >
+                  <td className="py-2 pr-4 font-mono text-xs text-gray-200 max-w-md truncate">
+                    {f.file_path}
+                  </td>
+                  <td className="py-2 pr-4 text-right text-indigo-400 font-semibold">
+                    {f.churn_score}
+                  </td>
+                  <td className="py-2 pr-4 text-right text-gray-300">{f.change_count}</td>
+                  <td className="py-2 pr-4 text-right">
+                    <span className="text-green-400">+{f.total_insertions}</span>{' '}
+                    <span className="text-red-400">-{f.total_deletions}</span>
+                  </td>
+                  <td className="py-2 pr-4 text-right text-gray-300">{f.author_count}</td>
+                  <td className="py-2 text-right text-gray-400 text-xs">
+                    {new Date(f.last_changed).toLocaleDateString()}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
-      </div>
-    </div>
-  );
-}
-
-function CommitList({ commits }) {
-  if (!commits || !commits.commits.length) {
-    return <p className="text-gray-500">No commits available.</p>;
-  }
-
-  return (
-    <div>
-      <h2 className="text-lg font-semibold mb-3">
-        Recent Commits{' '}
-        <span className="text-gray-500 text-sm font-normal">
-          ({commits.total} total, showing {commits.commits.length})
-        </span>
-      </h2>
-      <div className="space-y-2">
-        {commits.commits.map((c) => (
-          <div key={c.id} className="border border-gray-800 rounded-lg p-3 hover:bg-gray-900/50">
-            <div className="flex items-start justify-between">
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-gray-200 truncate">{c.message}</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {c.author_name} · {new Date(c.date).toLocaleDateString()} ·{' '}
-                  <span className="text-green-400">+{c.insertions}</span>{' '}
-                  <span className="text-red-400">-{c.deletions}</span>{' '}
-                  <span className="text-gray-400">({c.files_changed} files)</span>
-                </p>
-              </div>
-              <code className="text-xs text-gray-600 ml-3 shrink-0">{c.hash.slice(0, 7)}</code>
-            </div>
-          </div>
-        ))}
       </div>
     </div>
   );
