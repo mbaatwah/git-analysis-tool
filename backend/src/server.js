@@ -5,6 +5,7 @@ import { getDb, closeDb } from './db/schema.js';
 import configRouter from './routes/config.js';
 import commitsRouter from './routes/commits.js';
 import filesRouter from './routes/files.js';
+import analysisRouter from './routes/analysis.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -21,6 +22,7 @@ console.log('Database initialized');
 app.use('/api/config', configRouter);
 app.use('/api/commits', commitsRouter);
 app.use('/api/files', filesRouter);
+app.use('/api/analysis', analysisRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {

@@ -4,3 +4,4 @@ dist/
 *.db
 backend/data/
 .DS_Store
+.vite/
