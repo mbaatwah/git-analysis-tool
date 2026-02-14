@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useApi } from './hooks/useApi.js';
 import Treemap from './visualizations/Treemap.jsx';
+import CouplingGraph from './visualizations/CouplingGraph.jsx';
 import FileDetailPanel from './components/FileDetailPanel.jsx';
 import DateFilter from './components/DateFilter.jsx';
 
@@ -12,6 +13,10 @@ function App() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [view, setView] = useState('treemap');
   const [dateFilter, setDateFilter] = useState({});
+  const [couplingData, setCouplingData] = useState(null);
+  const [couplingThreshold, setCouplingThreshold] = useState(0.3);
+  const [minCoChanges, setMinCoChanges] = useState(2);
+  const [selectedCouplingNode, setSelectedCouplingNode] = useState(null);
   const { get, post, loading, error, setError } = useApi();
 
   const fetchChurnData = useCallback(
@@ -26,6 +31,20 @@ function App() {
     [get]
   );
 
+  const fetchCouplingData = useCallback(
+    async (repoId, filters = {}, threshold, minCo) => {
+      const params = new URLSearchParams({ repoId });
+      if (filters.startDate) params.set('startDate', filters.startDate);
+      if (filters.endDate) params.set('endDate', filters.endDate);
+      params.set('minCoupling', threshold ?? 0.3);
+      params.set('minCoChanges', minCo ?? 2);
+
+      const data = await get(`/analysis/coupling?${params}`);
+      setCouplingData(data);
+    },
+    [get]
+  );
+
   const handleSync = async () => {
     if (!repoPath.trim()) return;
     setError(null);
@@ -35,6 +54,7 @@ function App() {
       setRepo(data.repo);
       setRepoInfo(data.info);
       await fetchChurnData(data.repo.id);
+      await fetchCouplingData(data.repo.id, {}, couplingThreshold, minCoChanges);
     } catch (e) {
       // error is already set by useApi
     }
@@ -44,7 +64,25 @@ function App() {
     setDateFilter(filters);
     if (repo) {
       setSelectedFile(null);
+      setSelectedCouplingNode(null);
       await fetchChurnData(repo.id, filters);
+      await fetchCouplingData(repo.id, filters, couplingThreshold, minCoChanges);
+    }
+  };
+
+  const handleCouplingThresholdChange = async (val) => {
+    setCouplingThreshold(val);
+    if (repo) {
+      setSelectedCouplingNode(null);
+      await fetchCouplingData(repo.id, dateFilter, val, minCoChanges);
+    }
+  };
+
+  const handleMinCoChangesChange = async (val) => {
+    setMinCoChanges(val);
+    if (repo) {
+      setSelectedCouplingNode(null);
+      await fetchCouplingData(repo.id, dateFilter, couplingThreshold, val);
     }
   };
 
@@ -63,7 +101,19 @@ function App() {
             <span className="text-indigo-400">git</span>-analysis
           </h1>
           <div className="flex items-center gap-4">
-            {churnData && (
+            {view === 'coupling' && couplingData ? (
+              <div className="flex items-center gap-3 text-xs text-gray-500">
+                <span>
+                  <span className="text-gray-300 font-medium">{couplingData.summary.totalNodes}</span> files
+                </span>
+                <span>
+                  <span className="text-indigo-400 font-medium">{couplingData.summary.totalPairs}</span> pairs
+                </span>
+                <span>
+                  <span className="text-amber-400 font-medium">{couplingData.summary.crossDirectoryPairs}</span> cross-dir
+                </span>
+              </div>
+            ) : churnData && (
               <div className="flex items-center gap-3 text-xs text-gray-500">
                 <span>
                   <span className="text-gray-300 font-medium">{churnData.summary.totalFiles}</span> files
@@ -141,7 +191,7 @@ function App() {
                   View
                 </label>
                 <div className="flex gap-1">
-                  {['treemap', 'table'].map((v) => (
+                  {['treemap', 'table', 'coupling'].map((v) => (
                     <button
                       key={v}
                       onClick={() => setView(v)}
@@ -157,18 +207,68 @@ function App() {
                 </div>
               </div>
 
-              {/* Legend */}
-              <div>
-                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
-                  Recency
-                </label>
-                <div className="space-y-1 text-xs">
-                  <LegendItem color="bg-red-500" label="< 7 days ago" />
-                  <LegendItem color="bg-amber-500" label="< 30 days ago" />
-                  <LegendItem color="bg-indigo-500" label="< 90 days ago" />
-                  <LegendItem color="bg-slate-700" label="> 90 days ago" />
+              {view === 'coupling' ? (
+                <>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                      Min Coupling: {couplingThreshold}
+                    </label>
+                    <input
+                      type="range"
+                      min="0.1"
+                      max="1"
+                      step="0.05"
+                      value={couplingThreshold}
+                      onChange={(e) => handleCouplingThresholdChange(Number(e.target.value))}
+                      className="w-full accent-indigo-500"
+                    />
+                    <div className="flex justify-between text-xs text-gray-600 mt-1">
+                      <span>0.1</span>
+                      <span>1.0</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                      Min Co-Changes: {minCoChanges}
+                    </label>
+                    <input
+                      type="range"
+                      min="1"
+                      max="20"
+                      step="1"
+                      value={minCoChanges}
+                      onChange={(e) => handleMinCoChangesChange(Number(e.target.value))}
+                      className="w-full accent-indigo-500"
+                    />
+                    <div className="flex justify-between text-xs text-gray-600 mt-1">
+                      <span>1</span>
+                      <span>20</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                      Legend
+                    </label>
+                    <div className="space-y-1 text-xs">
+                      <LegendItem color="bg-amber-500" label="Cross-directory (dashed)" />
+                      <LegendItem color="bg-slate-500" label="Same directory" />
+                    </div>
+                    <p className="text-xs text-gray-600 mt-2">Node size = change frequency. Edge thickness = coupling strength.</p>
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                    Recency
+                  </label>
+                  <div className="space-y-1 text-xs">
+                    <LegendItem color="bg-red-500" label="< 7 days ago" />
+                    <LegendItem color="bg-amber-500" label="< 30 days ago" />
+                    <LegendItem color="bg-indigo-500" label="< 90 days ago" />
+                    <LegendItem color="bg-slate-700" label="> 90 days ago" />
+                  </div>
                 </div>
-              </div>
+              )}
             </>
           )}
         </aside>
@@ -188,6 +288,19 @@ function App() {
                 files={churnData?.files || []}
                 onFileSelect={handleFileSelect}
                 selectedFile={selectedFile}
+              />
+            ) : view === 'coupling' ? (
+              <CouplingGraph
+                nodes={couplingData?.nodes || []}
+                edges={couplingData?.edges || []}
+                onNodeSelect={(nodeId) => {
+                  setSelectedCouplingNode((prev) => prev === nodeId ? null : nodeId);
+                  // Also select matching churn file for the detail panel
+                  const churnFile = churnData?.files?.find((f) => f.file_path === nodeId);
+                  if (churnFile) setSelectedFile(churnFile);
+                  else setSelectedFile(null);
+                }}
+                selectedNode={selectedCouplingNode}
               />
             ) : (
               <div className="p-6">
