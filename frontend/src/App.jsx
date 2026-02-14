@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useApi } from './hooks/useApi.js';
 import Treemap from './visualizations/Treemap.jsx';
 import CouplingGraph from './visualizations/CouplingGraph.jsx';
+import TimeTravel from './visualizations/TimeTravel.jsx';
 import FileDetailPanel from './components/FileDetailPanel.jsx';
 import DateFilter from './components/DateFilter.jsx';
 
@@ -17,6 +18,9 @@ function App() {
   const [couplingThreshold, setCouplingThreshold] = useState(0.3);
   const [minCoChanges, setMinCoChanges] = useState(2);
   const [selectedCouplingNode, setSelectedCouplingNode] = useState(null);
+  const [commitList, setCommitList] = useState([]);
+  const [snapshot, setSnapshot] = useState(null);
+  const [snapshotLoading, setSnapshotLoading] = useState(false);
   const { get, post, loading, error, setError } = useApi();
 
   const fetchChurnData = useCallback(
@@ -45,6 +49,27 @@ function App() {
     [get]
   );
 
+  const fetchCommitList = useCallback(
+    async (repoId) => {
+      const data = await get(`/analysis/commits?repoId=${repoId}`);
+      setCommitList(data.commits || []);
+    },
+    [get]
+  );
+
+  const fetchSnapshot = useCallback(
+    async (repoId, commitIndex) => {
+      setSnapshotLoading(true);
+      try {
+        const data = await get(`/analysis/snapshot?repoId=${repoId}&commitIndex=${commitIndex}`);
+        setSnapshot(data);
+      } finally {
+        setSnapshotLoading(false);
+      }
+    },
+    [get]
+  );
+
   const handleSync = async () => {
     if (!repoPath.trim()) return;
     setError(null);
@@ -55,6 +80,7 @@ function App() {
       setRepoInfo(data.info);
       await fetchChurnData(data.repo.id);
       await fetchCouplingData(data.repo.id, {}, couplingThreshold, minCoChanges);
+      await fetchCommitList(data.repo.id);
     } catch (e) {
       // error is already set by useApi
     }
@@ -191,7 +217,7 @@ function App() {
                   View
                 </label>
                 <div className="flex gap-1">
-                  {['treemap', 'table', 'coupling'].map((v) => (
+                  {['treemap', 'table', 'coupling', 'timeline'].map((v) => (
                     <button
                       key={v}
                       onClick={() => setView(v)}
@@ -207,7 +233,21 @@ function App() {
                 </div>
               </div>
 
-              {view === 'coupling' ? (
+              {view === 'timeline' ? (
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                    Legend
+                  </label>
+                  <div className="space-y-1 text-xs">
+                    <LegendItem color="bg-amber-500" label="Changed in current commit" />
+                    <LegendItem color="bg-red-500" label="Changed today" />
+                    <LegendItem color="bg-orange-500" label="Changed this week" />
+                    <LegendItem color="bg-indigo-500" label="Changed this month" />
+                    <LegendItem color="bg-slate-700" label="Older" />
+                  </div>
+                  <p className="text-xs text-gray-600 mt-2">Drag the scrubber or click Play to travel through commits. File size = lines changed.</p>
+                </div>
+              ) : view === 'coupling' ? (
                 <>
                   <div>
                     <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
@@ -288,6 +328,15 @@ function App() {
                 files={churnData?.files || []}
                 onFileSelect={handleFileSelect}
                 selectedFile={selectedFile}
+              />
+            ) : view === 'timeline' ? (
+              <TimeTravel
+                commits={commitList}
+                snapshot={snapshot}
+                loading={snapshotLoading}
+                onCommitChange={(idx) => {
+                  if (repo) fetchSnapshot(repo.id, idx);
+                }}
               />
             ) : view === 'coupling' ? (
               <CouplingGraph

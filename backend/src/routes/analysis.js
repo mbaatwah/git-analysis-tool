@@ -3,6 +3,7 @@ import { asyncHandler, ValidationError, NotFoundError } from '../utils/errors.js
 import { getRepo } from '../db/queries.js';
 import { getChurnAnalysis, getChurnByDirectory, getFileChurnHistory } from '../analyzers/churn.js';
 import { getCouplingAnalysis, getFileCoupling } from '../analyzers/coupling.js';
+import { getCommitList, getSnapshotAtCommit } from '../analyzers/timeline.js';
 
 const router = Router();
 
@@ -151,6 +152,49 @@ router.get(
       repoId: Number(repoId),
       ...result,
     });
+  })
+);
+
+// GET /api/analysis/commits?repoId=1
+router.get(
+  '/commits',
+  asyncHandler(async (req, res) => {
+    const { repoId } = req.query;
+
+    if (!repoId) {
+      throw new ValidationError('repoId query parameter is required');
+    }
+
+    const repo = getRepo(Number(repoId));
+    if (!repo) {
+      throw new NotFoundError(`Repository with id ${repoId} not found`);
+    }
+
+    const commits = getCommitList(Number(repoId));
+    res.json({ repoId: Number(repoId), commits });
+  })
+);
+
+// GET /api/analysis/snapshot?repoId=1&commitIndex=5
+router.get(
+  '/snapshot',
+  asyncHandler(async (req, res) => {
+    const { repoId, commitIndex } = req.query;
+
+    if (!repoId) {
+      throw new ValidationError('repoId query parameter is required');
+    }
+    if (commitIndex == null) {
+      throw new ValidationError('commitIndex query parameter is required');
+    }
+
+    const repo = getRepo(Number(repoId));
+    if (!repo) {
+      throw new NotFoundError(`Repository with id ${repoId} not found`);
+    }
+
+    const result = getSnapshotAtCommit(Number(repoId), Number(commitIndex));
+    res.json({ repoId: Number(repoId), ...result });
   })
 );
 
