@@ -3,6 +3,7 @@ import { useApi } from './hooks/useApi.js';
 import Treemap from './visualizations/Treemap.jsx';
 import CouplingGraph from './visualizations/CouplingGraph.jsx';
 import TimeTravel from './visualizations/TimeTravel.jsx';
+import OwnershipMap from './visualizations/OwnershipMap.jsx';
 import FileDetailPanel from './components/FileDetailPanel.jsx';
 import DateFilter from './components/DateFilter.jsx';
 import FolderPicker from './components/FolderPicker.jsx';
@@ -24,6 +25,7 @@ function App() {
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const [directories, setDirectories] = useState([]);
   const [directoryFilter, setDirectoryFilter] = useState(null);
+  const [ownershipData, setOwnershipData] = useState(null);
   const { get, post, loading, error, setError } = useApi();
 
   const fetchChurnData = useCallback(
@@ -50,6 +52,19 @@ function App() {
 
       const data = await get(`/analysis/coupling?${params}`);
       setCouplingData(data);
+    },
+    [get]
+  );
+
+  const fetchOwnershipData = useCallback(
+    async (repoId, filters = {}, dir) => {
+      const params = new URLSearchParams({ repoId });
+      if (filters.startDate) params.set('startDate', filters.startDate);
+      if (filters.endDate) params.set('endDate', filters.endDate);
+      if (dir) params.set('directory', dir);
+
+      const data = await get(`/analysis/ownership?${params}`);
+      setOwnershipData(data);
     },
     [get]
   );
@@ -89,6 +104,7 @@ function App() {
       setDirectories(dirsData.directories || []);
       await fetchChurnData(data.repo.id, {}, directoryFilter);
       await fetchCouplingData(data.repo.id, {}, couplingThreshold, minCoChanges, directoryFilter);
+      await fetchOwnershipData(data.repo.id, {}, directoryFilter);
       await fetchCommitList(data.repo.id);
     } catch (e) {
       // error is already set by useApi
@@ -102,6 +118,7 @@ function App() {
       setSelectedCouplingNode(null);
       await fetchChurnData(repo.id, filters, directoryFilter);
       await fetchCouplingData(repo.id, filters, couplingThreshold, minCoChanges, directoryFilter);
+      await fetchOwnershipData(repo.id, filters, directoryFilter);
     }
   };
 
@@ -136,7 +153,19 @@ function App() {
             <span className="text-indigo-400">git</span>-analysis
           </h1>
           <div className="flex items-center gap-4">
-            {view === 'coupling' && couplingData ? (
+            {view === 'ownership' && ownershipData ? (
+              <div className="flex items-center gap-3 text-xs text-gray-500">
+                <span>
+                  <span className="text-gray-300 font-medium">{ownershipData.summary.totalFiles}</span> files
+                </span>
+                <span>
+                  <span className="text-gray-300 font-medium">{ownershipData.summary.totalAuthors}</span> authors
+                </span>
+                <span>
+                  <span className="text-red-400 font-medium">{ownershipData.summary.busFactorRiskFiles}</span> at risk ({ownershipData.summary.busFactorRiskPct}%)
+                </span>
+              </div>
+            ) : view === 'coupling' && couplingData ? (
               <div className="flex items-center gap-3 text-xs text-gray-500">
                 <span>
                   <span className="text-gray-300 font-medium">{couplingData.summary.totalNodes}</span> files
@@ -229,6 +258,7 @@ function App() {
                   setSnapshot(null);
                   fetchChurnData(repo.id, dateFilter, dir);
                   fetchCouplingData(repo.id, dateFilter, couplingThreshold, minCoChanges, dir);
+                  fetchOwnershipData(repo.id, dateFilter, dir);
                 }}
               />
 
@@ -239,7 +269,7 @@ function App() {
                   View
                 </label>
                 <div className="flex gap-1">
-                  {['treemap', 'table', 'coupling', 'timeline'].map((v) => (
+                  {['treemap', 'table', 'coupling', 'ownership', 'timeline'].map((v) => (
                     <button
                       key={v}
                       onClick={() => setView(v)}
@@ -255,7 +285,33 @@ function App() {
                 </div>
               </div>
 
-              {view === 'timeline' ? (
+              {view === 'ownership' ? (
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                    Ownership Legend
+                  </label>
+                  {ownershipData && ownershipData.authors.slice(0, 10).map((a, i) => (
+                    <div key={a.name} className="flex items-center gap-2 text-xs mb-1">
+                      <div
+                        className="w-3 h-3 rounded-sm shrink-0"
+                        style={{ backgroundColor: [
+                          '#6366f1', '#ec4899', '#14b8a6', '#f59e0b', '#8b5cf6',
+                          '#06b6d4', '#f43f5e', '#84cc16', '#e879f9', '#22d3ee',
+                        ][i % 10] }}
+                      />
+                      <span className="text-gray-400 truncate">{a.name}</span>
+                      <span className="text-gray-600 ml-auto shrink-0">{a.files}f</span>
+                    </div>
+                  ))}
+                  <div className="mt-3 space-y-1 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="text-red-400">⚠</span>
+                      <span className="text-gray-400">Red border = bus factor risk (1 author)</span>
+                    </div>
+                    <p className="text-gray-600">Opacity = ownership concentration. Brighter = more concentrated.</p>
+                  </div>
+                </div>
+              ) : view === 'timeline' ? (
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
                     Legend
@@ -348,6 +404,14 @@ function App() {
             ) : view === 'treemap' ? (
               <Treemap
                 files={churnData?.files || []}
+                onFileSelect={handleFileSelect}
+                selectedFile={selectedFile}
+              />
+            ) : view === 'ownership' ? (
+              <OwnershipMap
+                files={ownershipData?.files || []}
+                authors={ownershipData?.authors || []}
+                summary={ownershipData?.summary}
                 onFileSelect={handleFileSelect}
                 selectedFile={selectedFile}
               />

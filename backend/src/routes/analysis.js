@@ -4,6 +4,7 @@ import { getRepo } from '../db/queries.js';
 import { getChurnAnalysis, getChurnByDirectory, getFileChurnHistory } from '../analyzers/churn.js';
 import { getCouplingAnalysis, getFileCoupling } from '../analyzers/coupling.js';
 import { getCommitList, getSnapshotAtCommit, getDirectoryTree } from '../analyzers/timeline.js';
+import { getOwnershipAnalysis } from '../analyzers/ownership.js';
 
 const router = Router();
 
@@ -216,6 +217,35 @@ router.get(
 
     const directories = getDirectoryTree(Number(repoId));
     res.json({ repoId: Number(repoId), directories });
+  })
+);
+
+// GET /api/analysis/ownership?repoId=1&directory=...&startDate=...&endDate=...
+router.get(
+  '/ownership',
+  asyncHandler(async (req, res) => {
+    const { repoId, startDate, endDate, directory } = req.query;
+
+    if (!repoId) {
+      throw new ValidationError('repoId query parameter is required');
+    }
+
+    const repo = getRepo(Number(repoId));
+    if (!repo) {
+      throw new NotFoundError(`Repository with id ${repoId} not found`);
+    }
+
+    const result = getOwnershipAnalysis(Number(repoId), {
+      startDate,
+      endDate,
+      directory,
+    });
+
+    res.json({
+      repoId: Number(repoId),
+      filters: { startDate, endDate, directory },
+      ...result,
+    });
   })
 );
 
