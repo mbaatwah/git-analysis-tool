@@ -7,7 +7,10 @@ export default function TimeTravel({ commits, snapshot, onCommitChange, loading 
   const containerRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(commits.length - 1);
+  const [speed, setSpeed] = useState(400);
   const playRef = useRef(null);
+  const SPEEDS = [1600, 800, 400, 200, 100, 50];
+  const SPEED_LABELS = ['0.25x', '0.5x', '1x', '2x', '4x', '8x'];
   const [treeDims, setTreeDims] = useState({ width: 0, height: 0 });
 
   // Sync currentIndex when commits change
@@ -47,12 +50,25 @@ export default function TimeTravel({ commits, snapshot, onCommitChange, loading 
           }
           return prev + 1;
         });
-      }, 400);
+      }, speed);
     }
     return () => {
       if (playRef.current) clearInterval(playRef.current);
     };
-  }, [playing, commits.length]);
+  }, [playing, commits.length, speed]);
+
+  const speedIndex = SPEEDS.indexOf(speed);
+  const speedLabel = SPEED_LABELS[speedIndex] || '1x';
+
+  const slower = () => {
+    const idx = SPEEDS.indexOf(speed);
+    if (idx > 0) setSpeed(SPEEDS[idx - 1]);
+  };
+
+  const faster = () => {
+    const idx = SPEEDS.indexOf(speed);
+    if (idx < SPEEDS.length - 1) setSpeed(SPEEDS[idx + 1]);
+  };
 
   // Draw scrubber
   useEffect(() => {
@@ -279,11 +295,28 @@ export default function TimeTravel({ commits, snapshot, onCommitChange, loading 
             ◀
           </button>
           <button
+            onClick={slower}
+            disabled={speedIndex <= 0}
+            className="text-gray-400 hover:text-white disabled:text-gray-700 text-xs px-1"
+            title="Slower"
+          >
+            ⏪
+          </button>
+          <button
             onClick={() => setPlaying((p) => !p)}
             className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-1 rounded-md"
           >
             {playing ? '⏸ Pause' : '▶ Play'}
           </button>
+          <button
+            onClick={faster}
+            disabled={speedIndex >= SPEEDS.length - 1}
+            className="text-gray-400 hover:text-white disabled:text-gray-700 text-xs px-1"
+            title="Faster"
+          >
+            ⏩
+          </button>
+          <span className="text-xs text-gray-500 font-mono w-8 text-center">{speedLabel}</span>
           <button
             onClick={() => setCurrentIndex((p) => Math.min(commits.length - 1, p + 1))}
             disabled={currentIndex >= commits.length - 1}
