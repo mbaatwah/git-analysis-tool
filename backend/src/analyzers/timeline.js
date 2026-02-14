@@ -27,7 +27,28 @@ export function getCommitList(repoId) {
  * Get codebase snapshot up to a specific commit index.
  * Returns cumulative file stats (same shape as churn files) so the treemap can render it.
  */
-export function getSnapshotAtCommit(repoId, commitIndex) {
+/**
+ * Get distinct directories from all file changes for a repo.
+ */
+export function getDirectoryTree(repoId) {
+  const db = getDb();
+
+  const rows = db.prepare(`
+    SELECT DISTINCT file_path FROM file_changes WHERE repo_id = ?
+  `).all(repoId);
+
+  const dirs = new Set();
+  for (const row of rows) {
+    const parts = row.file_path.split('/');
+    for (let i = 1; i < parts.length; i++) {
+      dirs.add(parts.slice(0, i).join('/'));
+    }
+  }
+
+  return Array.from(dirs).sort();
+}
+
+export function getSnapshotAtCommit(repoId, commitIndex, { directory } = {}) {
   const db = getDb();
 
   // Get all commit IDs up to and including the given index
@@ -47,6 +68,7 @@ export function getSnapshotAtCommit(repoId, commitIndex) {
   const placeholders = commitIds.map(() => '?').join(',');
 
   // Cumulative file stats up to this commit
+  const dirFilter = directory ? `AND fc.file_path LIKE '${directory}/%'` : '';
   const files = db.prepare(`
     SELECT
       fc.file_path,
@@ -59,7 +81,7 @@ export function getSnapshotAtCommit(repoId, commitIndex) {
       COUNT(DISTINCT c.author_name) as author_count
     FROM file_changes fc
     JOIN commits c ON c.id = fc.commit_id
-    WHERE fc.commit_id IN (${placeholders}) AND fc.repo_id = ?
+    WHERE fc.commit_id IN (${placeholders}) AND fc.repo_id = ? ${dirFilter}
     GROUP BY fc.file_path
     ORDER BY total_lines_changed DESC
   `).all(...commitIds, repoId);
@@ -68,7 +90,7 @@ export function getSnapshotAtCommit(repoId, commitIndex) {
   const changedInCurrent = db.prepare(`
     SELECT file_path, insertions, deletions
     FROM file_changes
-    WHERE commit_id = ? AND repo_id = ?
+    WHERE commit_id = ? AND repo_id = ? ${directory ? `AND file_path LIKE '${directory}/%'` : ''}
   `).all(currentCommit.id, repoId);
 
   const changedSet = new Set(changedInCurrent.map((f) => f.file_path));

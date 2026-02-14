@@ -5,6 +5,7 @@ import CouplingGraph from './visualizations/CouplingGraph.jsx';
 import TimeTravel from './visualizations/TimeTravel.jsx';
 import FileDetailPanel from './components/FileDetailPanel.jsx';
 import DateFilter from './components/DateFilter.jsx';
+import FolderPicker from './components/FolderPicker.jsx';
 
 function App() {
   const [repoPath, setRepoPath] = useState('');
@@ -21,13 +22,16 @@ function App() {
   const [commitList, setCommitList] = useState([]);
   const [snapshot, setSnapshot] = useState(null);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
+  const [directories, setDirectories] = useState([]);
+  const [directoryFilter, setDirectoryFilter] = useState(null);
   const { get, post, loading, error, setError } = useApi();
 
   const fetchChurnData = useCallback(
-    async (repoId, filters = {}) => {
+    async (repoId, filters = {}, dir) => {
       const params = new URLSearchParams({ repoId });
       if (filters.startDate) params.set('startDate', filters.startDate);
       if (filters.endDate) params.set('endDate', filters.endDate);
+      if (dir) params.set('directory', dir);
 
       const data = await get(`/analysis/churn?${params}`);
       setChurnData(data);
@@ -36,12 +40,13 @@ function App() {
   );
 
   const fetchCouplingData = useCallback(
-    async (repoId, filters = {}, threshold, minCo) => {
+    async (repoId, filters = {}, threshold, minCo, dir) => {
       const params = new URLSearchParams({ repoId });
       if (filters.startDate) params.set('startDate', filters.startDate);
       if (filters.endDate) params.set('endDate', filters.endDate);
       params.set('minCoupling', threshold ?? 0.3);
       params.set('minCoChanges', minCo ?? 2);
+      if (dir) params.set('directory', dir);
 
       const data = await get(`/analysis/coupling?${params}`);
       setCouplingData(data);
@@ -58,10 +63,12 @@ function App() {
   );
 
   const fetchSnapshot = useCallback(
-    async (repoId, commitIndex) => {
+    async (repoId, commitIndex, dir) => {
       setSnapshotLoading(true);
       try {
-        const data = await get(`/analysis/snapshot?repoId=${repoId}&commitIndex=${commitIndex}`);
+        const params = new URLSearchParams({ repoId, commitIndex });
+        if (dir) params.set('directory', dir);
+        const data = await get(`/analysis/snapshot?${params}`);
         setSnapshot(data);
       } finally {
         setSnapshotLoading(false);
@@ -78,8 +85,10 @@ function App() {
       const data = await post('/config/repo', { path: repoPath.trim() });
       setRepo(data.repo);
       setRepoInfo(data.info);
-      await fetchChurnData(data.repo.id);
-      await fetchCouplingData(data.repo.id, {}, couplingThreshold, minCoChanges);
+      const dirsData = await get(`/analysis/directories?repoId=${data.repo.id}`);
+      setDirectories(dirsData.directories || []);
+      await fetchChurnData(data.repo.id, {}, directoryFilter);
+      await fetchCouplingData(data.repo.id, {}, couplingThreshold, minCoChanges, directoryFilter);
       await fetchCommitList(data.repo.id);
     } catch (e) {
       // error is already set by useApi
@@ -91,8 +100,8 @@ function App() {
     if (repo) {
       setSelectedFile(null);
       setSelectedCouplingNode(null);
-      await fetchChurnData(repo.id, filters);
-      await fetchCouplingData(repo.id, filters, couplingThreshold, minCoChanges);
+      await fetchChurnData(repo.id, filters, directoryFilter);
+      await fetchCouplingData(repo.id, filters, couplingThreshold, minCoChanges, directoryFilter);
     }
   };
 
@@ -100,7 +109,7 @@ function App() {
     setCouplingThreshold(val);
     if (repo) {
       setSelectedCouplingNode(null);
-      await fetchCouplingData(repo.id, dateFilter, val, minCoChanges);
+      await fetchCouplingData(repo.id, dateFilter, val, minCoChanges, directoryFilter);
     }
   };
 
@@ -108,7 +117,7 @@ function App() {
     setMinCoChanges(val);
     if (repo) {
       setSelectedCouplingNode(null);
-      await fetchCouplingData(repo.id, dateFilter, couplingThreshold, val);
+      await fetchCouplingData(repo.id, dateFilter, couplingThreshold, val, directoryFilter);
     }
   };
 
@@ -210,6 +219,19 @@ function App() {
 
           {repo && (
             <>
+              <FolderPicker
+                directories={directories}
+                selected={directoryFilter}
+                onSelect={(dir) => {
+                  setDirectoryFilter(dir);
+                  setSelectedFile(null);
+                  setSelectedCouplingNode(null);
+                  setSnapshot(null);
+                  fetchChurnData(repo.id, dateFilter, dir);
+                  fetchCouplingData(repo.id, dateFilter, couplingThreshold, minCoChanges, dir);
+                }}
+              />
+
               <DateFilter onFilterChange={handleDateFilterChange} />
 
               <div>
@@ -335,7 +357,7 @@ function App() {
                 snapshot={snapshot}
                 loading={snapshotLoading}
                 onCommitChange={(idx) => {
-                  if (repo) fetchSnapshot(repo.id, idx);
+                  if (repo) fetchSnapshot(repo.id, idx, directoryFilter);
                 }}
               />
             ) : view === 'coupling' ? (

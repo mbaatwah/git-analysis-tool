@@ -3,7 +3,7 @@ import { asyncHandler, ValidationError, NotFoundError } from '../utils/errors.js
 import { getRepo } from '../db/queries.js';
 import { getChurnAnalysis, getChurnByDirectory, getFileChurnHistory } from '../analyzers/churn.js';
 import { getCouplingAnalysis, getFileCoupling } from '../analyzers/coupling.js';
-import { getCommitList, getSnapshotAtCommit } from '../analyzers/timeline.js';
+import { getCommitList, getSnapshotAtCommit, getDirectoryTree } from '../analyzers/timeline.js';
 
 const router = Router();
 
@@ -193,8 +193,29 @@ router.get(
       throw new NotFoundError(`Repository with id ${repoId} not found`);
     }
 
-    const result = getSnapshotAtCommit(Number(repoId), Number(commitIndex));
+    const { directory } = req.query;
+    const result = getSnapshotAtCommit(Number(repoId), Number(commitIndex), { directory });
     res.json({ repoId: Number(repoId), ...result });
+  })
+);
+
+// GET /api/analysis/directories?repoId=1
+router.get(
+  '/directories',
+  asyncHandler(async (req, res) => {
+    const { repoId } = req.query;
+
+    if (!repoId) {
+      throw new ValidationError('repoId query parameter is required');
+    }
+
+    const repo = getRepo(Number(repoId));
+    if (!repo) {
+      throw new NotFoundError(`Repository with id ${repoId} not found`);
+    }
+
+    const directories = getDirectoryTree(Number(repoId));
+    res.json({ repoId: Number(repoId), directories });
   })
 );
 
