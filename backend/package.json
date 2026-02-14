@@ -13,6 +13,8 @@
     "better-sqlite3": "^11.7.0",
     "cors": "^2.8.5",
     "express": "^4.21.0",
-    "simple-git": "^3.27.0"
+    "simple-git": "^3.27.0",
+    "sloc": "^0.3.2",
+    "typhonjs-escomplex": "^0.1.0"
   }
 }
