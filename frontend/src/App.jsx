@@ -4,6 +4,7 @@ import Treemap from './visualizations/Treemap.jsx';
 import CouplingGraph from './visualizations/CouplingGraph.jsx';
 import TimeTravel from './visualizations/TimeTravel.jsx';
 import OwnershipMap from './visualizations/OwnershipMap.jsx';
+import ComplexityExplorer from './visualizations/ComplexityExplorer.jsx';
 import FileDetailPanel from './components/FileDetailPanel.jsx';
 import DateFilter from './components/DateFilter.jsx';
 import FolderPicker from './components/FolderPicker.jsx';
@@ -26,6 +27,7 @@ function App() {
   const [directories, setDirectories] = useState([]);
   const [directoryFilter, setDirectoryFilter] = useState(null);
   const [ownershipData, setOwnershipData] = useState(null);
+  const [complexityData, setComplexityData] = useState(null);
   const { get, post, loading, error, setError } = useApi();
 
   const fetchChurnData = useCallback(
@@ -69,6 +71,17 @@ function App() {
     [get]
   );
 
+  const fetchComplexityData = useCallback(
+    async (repoId, dir) => {
+      const params = new URLSearchParams({ repoId });
+      if (dir) params.set('directory', dir);
+
+      const data = await get(`/analysis/complexity?${params}`);
+      setComplexityData(data);
+    },
+    [get]
+  );
+
   const fetchCommitList = useCallback(
     async (repoId) => {
       const data = await get(`/analysis/commits?repoId=${repoId}`);
@@ -105,6 +118,7 @@ function App() {
       await fetchChurnData(data.repo.id, {}, directoryFilter);
       await fetchCouplingData(data.repo.id, {}, couplingThreshold, minCoChanges, directoryFilter);
       await fetchOwnershipData(data.repo.id, {}, directoryFilter);
+      await fetchComplexityData(data.repo.id, directoryFilter);
       await fetchCommitList(data.repo.id);
     } catch (e) {
       // error is already set by useApi
@@ -153,7 +167,19 @@ function App() {
             <span className="text-indigo-400">git</span>-analysis
           </h1>
           <div className="flex items-center gap-4">
-            {view === 'ownership' && ownershipData ? (
+            {view === 'complexity' && complexityData ? (
+              <div className="flex items-center gap-3 text-xs text-gray-500">
+                <span>
+                  <span className="text-gray-300 font-medium">{complexityData.summary.totalFiles}</span> files
+                </span>
+                <span>
+                  avg <span className="text-amber-400 font-medium">{complexityData.summary.avgComplexity}</span>
+                </span>
+                <span>
+                  <span className="text-red-400 font-medium">{complexityData.summary.highComplexityFiles}</span> high
+                </span>
+              </div>
+            ) : view === 'ownership' && ownershipData ? (
               <div className="flex items-center gap-3 text-xs text-gray-500">
                 <span>
                   <span className="text-gray-300 font-medium">{ownershipData.summary.totalFiles}</span> files
@@ -259,6 +285,7 @@ function App() {
                   fetchChurnData(repo.id, dateFilter, dir);
                   fetchCouplingData(repo.id, dateFilter, couplingThreshold, minCoChanges, dir);
                   fetchOwnershipData(repo.id, dateFilter, dir);
+                  fetchComplexityData(repo.id, dir);
                 }}
               />
 
@@ -269,7 +296,7 @@ function App() {
                   View
                 </label>
                 <div className="flex gap-1">
-                  {['treemap', 'table', 'coupling', 'ownership', 'timeline'].map((v) => (
+                  {['treemap', 'table', 'coupling', 'ownership', 'complexity', 'timeline'].map((v) => (
                     <button
                       key={v}
                       onClick={() => setView(v)}
@@ -285,7 +312,20 @@ function App() {
                 </div>
               </div>
 
-              {view === 'ownership' ? (
+              {view === 'complexity' ? (
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                    Complexity Legend
+                  </label>
+                  <div className="space-y-1 text-xs">
+                    <LegendItem color="bg-red-500" label="≥ 4.0 (very high)" />
+                    <LegendItem color="bg-amber-500" label="≥ 3.0 (high)" />
+                    <LegendItem color="bg-yellow-400" label="≥ 2.0 (moderate)" />
+                    <LegendItem color="bg-gray-500" label="< 2.0 (low)" />
+                  </div>
+                  <p className="text-xs text-gray-600 mt-2">Indentation-based complexity: total indent / code lines. Select a file to see growth.</p>
+                </div>
+              ) : view === 'ownership' ? (
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
                     Ownership Legend
@@ -406,6 +446,13 @@ function App() {
                 files={churnData?.files || []}
                 onFileSelect={handleFileSelect}
                 selectedFile={selectedFile}
+              />
+            ) : view === 'complexity' ? (
+              <ComplexityExplorer
+                files={complexityData?.files || []}
+                repoId={repo?.id}
+                directoryFilter={directoryFilter}
+                commits={commitList}
               />
             ) : view === 'ownership' ? (
               <OwnershipMap

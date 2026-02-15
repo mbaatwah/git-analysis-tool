@@ -5,6 +5,7 @@ import { getChurnAnalysis, getChurnByDirectory, getFileChurnHistory } from '../a
 import { getCouplingAnalysis, getFileCoupling } from '../analyzers/coupling.js';
 import { getCommitList, getSnapshotAtCommit, getDirectoryTree } from '../analyzers/timeline.js';
 import { getOwnershipAnalysis } from '../analyzers/ownership.js';
+import { getComplexityAnalysis, getFileGrowth, getFileContent, getFileContentAtCommit, getComplexityAtCommit, getFileDiffAtCommit } from '../analyzers/complexity.js';
 
 const router = Router();
 
@@ -246,6 +247,119 @@ router.get(
       filters: { startDate, endDate, directory },
       ...result,
     });
+  })
+);
+
+// GET /api/analysis/complexity?repoId=1&directory=...
+router.get(
+  '/complexity',
+  asyncHandler(async (req, res) => {
+    const { repoId, directory } = req.query;
+
+    if (!repoId) {
+      throw new ValidationError('repoId query parameter is required');
+    }
+
+    const repo = getRepo(Number(repoId));
+    if (!repo) {
+      throw new NotFoundError(`Repository with id ${repoId} not found`);
+    }
+
+    const result = getComplexityAnalysis(Number(repoId), { directory });
+    res.json({ repoId: Number(repoId), ...result });
+  })
+);
+
+// GET /api/analysis/complexity/file?repoId=1&filePath=src/server.js
+router.get(
+  '/complexity/file',
+  asyncHandler(async (req, res) => {
+    const { repoId, filePath } = req.query;
+
+    if (!repoId) {
+      throw new ValidationError('repoId query parameter is required');
+    }
+    if (!filePath) {
+      throw new ValidationError('filePath query parameter is required');
+    }
+
+    const repo = getRepo(Number(repoId));
+    if (!repo) {
+      throw new NotFoundError(`Repository with id ${repoId} not found`);
+    }
+
+    const result = getFileGrowth(Number(repoId), filePath);
+    res.json({ repoId: Number(repoId), ...result });
+  })
+);
+
+// GET /api/analysis/complexity/content?repoId=1&filePath=src/server.js
+router.get(
+  '/complexity/content',
+  asyncHandler(async (req, res) => {
+    const { repoId, filePath } = req.query;
+
+    if (!repoId) throw new ValidationError('repoId query parameter is required');
+    if (!filePath) throw new ValidationError('filePath query parameter is required');
+
+    const repo = getRepo(Number(repoId));
+    if (!repo) throw new NotFoundError(`Repository with id ${repoId} not found`);
+
+    const result = getFileContent(Number(repoId), filePath);
+    res.json({ repoId: Number(repoId), ...result });
+  })
+);
+
+// GET /api/analysis/complexity/content-at?repoId=1&filePath=src/server.js&commitHash=abc1234
+router.get(
+  '/complexity/content-at',
+  asyncHandler(async (req, res) => {
+    const { repoId, filePath, commitHash } = req.query;
+
+    if (!repoId) throw new ValidationError('repoId query parameter is required');
+    if (!filePath) throw new ValidationError('filePath query parameter is required');
+    if (!commitHash) throw new ValidationError('commitHash query parameter is required');
+
+    const repo = getRepo(Number(repoId));
+    if (!repo) throw new NotFoundError(`Repository with id ${repoId} not found`);
+
+    const result = getFileContentAtCommit(Number(repoId), filePath, commitHash);
+    res.json({ repoId: Number(repoId), ...result });
+  })
+);
+
+// GET /api/analysis/complexity/at-commit?repoId=1&commitIndex=5&directory=...
+router.get(
+  '/complexity/at-commit',
+  asyncHandler(async (req, res) => {
+    const { repoId, commitIndex, directory } = req.query;
+
+    if (!repoId) throw new ValidationError('repoId query parameter is required');
+    if (commitIndex == null) throw new ValidationError('commitIndex query parameter is required');
+
+    const repo = getRepo(Number(repoId));
+    if (!repo) throw new NotFoundError(`Repository with id ${repoId} not found`);
+
+    const result = getComplexityAtCommit(Number(repoId), Number(commitIndex), { directory });
+    res.json({ repoId: Number(repoId), ...result });
+  })
+);
+
+// GET /api/analysis/complexity/diff?repoId=1&filePath=src/server.js&commitHash=abc1234
+router.get(
+  '/complexity/diff',
+  asyncHandler(async (req, res) => {
+    const { repoId, filePath, commitHash } = req.query;
+
+    if (!repoId) throw new ValidationError('repoId query parameter is required');
+    if (!filePath) throw new ValidationError('filePath query parameter is required');
+    if (!commitHash) throw new ValidationError('commitHash query parameter is required');
+
+    const repo = getRepo(Number(repoId));
+    if (!repo) throw new NotFoundError(`Repository with id ${repoId} not found`);
+
+    const result = getFileDiffAtCommit(Number(repoId), filePath, commitHash);
+    res.json({ repoId: Number(repoId), ...result });
   })
 );
 
