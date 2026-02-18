@@ -5,6 +5,7 @@ import CouplingGraph from './visualizations/CouplingGraph.jsx';
 import TimeTravel from './visualizations/TimeTravel.jsx';
 import OwnershipMap from './visualizations/OwnershipMap.jsx';
 import ComplexityExplorer from './visualizations/ComplexityExplorer.jsx';
+import FileComplexityView from './visualizations/FileComplexityView.jsx';
 import FileDetailPanel from './components/FileDetailPanel.jsx';
 import DateFilter from './components/DateFilter.jsx';
 import FolderPicker from './components/FolderPicker.jsx';
@@ -296,7 +297,7 @@ function App() {
                   View
                 </label>
                 <div className="flex gap-1">
-                  {['treemap', 'table', 'coupling', 'ownership', 'complexity', 'timeline'].map((v) => (
+                  {['treemap', 'table', 'files', 'coupling', 'ownership', 'complexity', 'timeline'].map((v) => (
                     <button
                       key={v}
                       onClick={() => setView(v)}
@@ -483,6 +484,11 @@ function App() {
                   else setSelectedFile(null);
                 }}
                 selectedNode={selectedCouplingNode}
+              />
+            ) : view === 'files' ? (
+              <FileComplexityView
+                files={complexityData?.files || []}
+                repoId={repo?.id}
               />
             ) : (
               <div className="p-6">
