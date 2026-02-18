@@ -298,7 +298,7 @@ function App() {
                   View
                 </label>
                 <div className="flex gap-1">
-                  {['treemap', 'table', 'files', 'churn', 'coupling', 'ownership', 'complexity', 'timeline'].map((v) => (
+                  {['treemap', 'table', 'growth', 'churn', 'coupling', 'ownership', 'complexity', 'timeline'].map((v) => (
                     <button
                       key={v}
                       onClick={() => setView(v)}
@@ -491,7 +491,7 @@ function App() {
                 files={churnData?.files || []}
                 repoId={repo?.id}
               />
-            ) : view === 'files' ? (
+            ) : view === 'growth' ? (
               <FileComplexityView
                 files={complexityData?.files || []}
                 repoId={repo?.id}
